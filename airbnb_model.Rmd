@@ -1,0 +1,413 @@
+---
+title: "AIR_BNB_NYC(PROJECT)"
+author: "POTHU SWETHA"
+date: "2023-04-26"
+output: word_document
+---
+```{R}
+r = getOption('repos')
+r['CRAN'] = "http://cran.us.r-project.org"
+options(repos = r)
+library(dplyr)
+library(ggplot2)
+library(gridExtra) 
+library(GGally)
+library(lubridate)
+library(stringr)
+library(tidyr)
+library(caret)
+library(randomForest)
+library(car)
+install.packages("DataExplorer")
+library(DataExplorer)
+## New York City Air BNB open data
+# id: listing ID
+# name: name of the listing
+# host_id: host ID
+# host_name: name of the host
+# neighbourhood_group: location
+# neighbourhood: area
+# latitude: latitude coordinates
+# longitude: longitude coordinates
+# room_type: listing space type
+# price: price in dollars
+# minimum_nights: amount of nights minimum
+# number_of_reviews: number of reviews
+# last_review: latest review
+# reviews_per_month: number of reviews per month
+# calculated_host_listings_count: amount of listing per host
+# availability_365: number of days when listing is available for booking
+
+
+## Reading/Loading the dataset in R
+airbnb_data <- read.csv('AB_NYC_2019.csv')
+setwd("C:/Users/Sweth/OneDrive/Desktop/STAT 4600 (R)")
+head(airbnb_data)
+
+## Check the dimensions of the dataset
+dim(airbnb_data)
+
+## Check the number of null values in r
+colSums(is.na(airbnb_data))
+
+# we'll replace null values in the review column with zero.
+airbnb_data$reviews_per_month[is.na(airbnb_data$reviews_per_month)] <- 0
+colSums(is.na(airbnb_data))
+
+## Room type dummies
+room_dummies <- model.matrix(~ room_type - 1, data = airbnb_data)
+room_dummies <- room_dummies[, -1]
+head(room_dummies)
+
+## Neighbour dummies
+nei_dummies <- model.matrix(~ neighbourhood - 1, data = airbnb_data)
+nei_dummies <- nei_dummies[, -1]
+head(nei_dummies)
+
+## Neighborhood Group dummies
+nei_group_dummies <- model.matrix(~ neighbourhood_group - 1, data = airbnb_data)
+nei_group_dummies <- nei_group_dummies[, -1]
+head(nei_group_dummies)
+
+airbnb_data <- cbind(airbnb_data, room_dummies, nei_dummies, nei_group_dummies)
+colnames(airbnb_data)                                                                                 
+
+airbnb_data <- subset(airbnb_data, select = c(-id, -name, -host_id, -host_name, -neighbourhood,
+                                              -neighbourhood_group, -room_type))
+## Standardize the data
+colnames(airbnb_data)
+head(airbnb_data)
+scaled_airbnb_data <- log10(airbnb_data[, c('price', 
+                                            'minimum_nights', 'number_of_reviews',
+                                            'reviews_per_month', 'calculated_host_listings_count',
+                                            'availability_365')])
+
+
+
+head(scaled_airbnb_data)
+scaled_airbnb_data <- cbind(scaled_airbnb_data, subset(airbnb_data, select = c(-latitude, -longitude, 
+                                                                               -price, -minimum_nights, -number_of_reviews,
+                                                                               -reviews_per_month, 
+                                                                               -calculated_host_listings_count,
+                                                                               -availability_365, -last_review)))
+head(scaled_airbnb_data)
+colnames(scaled_airbnb_data)
+## Removing nulls and infinites from the scaled_data
+scaled_airbnb_data <- scaled_airbnb_data[is.finite(rowSums(scaled_airbnb_data)),]
+names(scaled_airbnb_data) <- gsub(" ", "_", names(scaled_airbnb_data))
+names(scaled_airbnb_data) <- gsub("'", "", names(scaled_airbnb_data))
+names(scaled_airbnb_data) <- gsub("-", "_", names(scaled_airbnb_data))
+names(scaled_airbnb_data) <- gsub(",", "_", names(scaled_airbnb_data))
+head(scaled_airbnb_data)
+
+
+ 
+## Split the data into train and test set
+set.seed(123)
+trainIndex <- createDataPartition(scaled_airbnb_data$price, p=0.7, list = FALSE)
+train_data <- scaled_airbnb_data[trainIndex, ]
+test_data <- scaled_airbnb_data[-trainIndex, ]
+head(train_data)
+head(test_data)
+
+X_train <- subset(train_data, select = -price)
+Y_train <- train_data$price
+X_test <- subset(test_data, select = -price)
+Y_test <- test_data$price
+
+## Scaled model
+## ----SHOULD NOT BE CONSIDERED----
+head(train_data)
+scaled_model <- lm(price ~ ., data = train_data)
+scaled_summary <- summary(scaled_model)
+scaled_summary
+colnames(scaled_summary$coefficients)
+p_values <- scaled_summary$coefficients[,4]
+p_values
+cols_to_keep <- names(p_values[-1])
+cols_to_keep
+
+train_data_1 <- train_data[, c("price", cols_to_keep)]
+model_1 <- lm(price ~ ., data =train_data_1)
+summary_1 <- summary(model_1)
+summary_1
+p_values <- summary_1$coefficients[, 4]
+non_sig_cols <- names(p_values[p_values > 0.05])
+non_sig_cols <- gsub("`", "", non_sig_cols)
+non_sig_cols
+length(non_sig_cols)
+
+vif_values <- vif(model_1)
+vif_values
+high_vif_cols_1 <- names(vif_values[vif_values > 5])
+high_vif_cols_1 <- gsub("`", "", high_vif_cols_1)
+high_vif_cols_1
+
+train_data_2 <- train_data_1[, !names(train_data_1) %in% c(high_vif_cols_1, non_sig_cols)]
+model_2 <- lm(price ~ ., data = train_data_2)
+summary_2 <- summary(model_2)
+summary_2
+
+# Get the p-values for each coefficient
+p_values <- summary_2$coefficients[, 4]
+
+# Get the column names of coefficients with p-values > 0.05 (not statistically significant)
+non_sig_cols <- names(p_values[p_values > 0.05])
+non_sig_cols <- gsub("`", "", non_sig_cols)
+non_sig_cols
+length(non_sig_cols)
+
+train_data_3 <- train_data_2[, !names(train_data_2) %in% non_sig_cols]
+model_3 <- lm(price ~ ., data = train_data_3)
+summary_3 <- summary(model_3)
+summary_3
+
+
+## Predicting the output
+lm_pred <- predict(model_3, test_data)
+
+## Plot the output
+plot(test_data$price, lm_pred, main = "Actual v/s Predicted for Multiple Linear Regression")
+
+## Random Forest Model
+## Hypertune the ntree parameter to alter the model performance
+# rf_train_data <- train_data[, c("price", predictors)]
+rf_model <- randomForest(price ~ ., data=train_data, ntree = 200)
+
+# Summary of the model
+print(rf_model)
+
+## Predicting with the RF model
+rf_pred <- predict(rf_model, test_data)
+cbind(rf_pred, test_data$price)
+rf_pred
+
+
+#Predict prices using the random forest model on the test data
+test_predictions <- predict(rf_model, newdata = test_data)
+
+# Calculate the mean absolute error of the predictions
+MAE <- mean(abs(test_predictions - test_data$price))
+
+# Calculate the accuracy as 1 - MAE / mean(test_data$price)
+accuracy <- 1 - MAE / mean(test_data$price)
+
+# Print the accuracy to the console
+print(paste("Accuracy of the random forest model is:", round(accuracy * 100, 2), "%"))
+
+
+###The best linear model is model_1 where columns with singularity are removed and everything else 
+  # is retained.
+  # R-squared of 0.598 is obtained and adjusted R-sqaured of 0.594
+  # The best Random Forest model is when all the columns are included in the model 
+  # and it explains 63.5% of the variability in the dependent variable.
+  # Using categorical dummy data did not do much for the models.
+
+## Plot the output
+plot(test_data$price, rf_pred, main = "Actual v/s Predicted for Random Forest")
+
+
+##=======================================VISUAL================
+
+
+
+
+
+# Load the dataset
+airbnb <- read.csv("AB_NYC_2019.csv")
+setwd("C:/Users/Sweth/OneDrive/Desktop/STAT 4600 (R)")
+
+correlations <- cor(airbnb[, sapply(airbnb, is.numeric)])
+correlations
+install.packages("corrplot")
+library(corrplot)
+cor_matrix <- cor(correlations, use = "pairwise.complete.obs")
+corrplot(cor_matrix, method = "circle", type = "upper", order = "hclust", tl.cex = 0.7)
+
+# Get the dimensions of the dataset
+dim(airbnb)
+
+# Display the summary information of the dataset
+str(airbnb)
+
+# Drop the specified columns
+airbnb<- subset(airbnb, select = -c(name, host_name, last_review, host_id))
+
+# Display the first few rows of the updated dataset
+head(airbnb)
+
+# Compute summary statistics
+summary(airbnb)
+
+## Check the number of null values in r
+colSums(is.na(airbnb))
+sum(is.na(airbnb))
+
+plot_correlation(airbnb)
+plot_histogram(airbnb)
+# Replace missing values with 0
+airbnb$reviews_per_month[is.na(airbnb$reviews_per_month)] <- 0
+airbnb$last_review[is.na(airbnb$last_review)] <- 0
+
+# Count the number of duplicated rows
+sum(duplicated(airbnb))
+# Extract unique values of neighbourhood_group
+unique(airbnb$neighbourhood_group)
+# Count the frequency of each value of neighbourhood_group
+table(airbnb$neighbourhood_group)
+
+##=======================================VISUAL================
+
+
+
+# Create the plot
+ggplot(data = airbnb, aes(x = neighbourhood_group)) +
+  geom_bar() +
+  ggtitle("Airbnb Borough Listings") +
+  xlab("Neighbourhood Group") +
+  ylab("Count") +
+  theme_bw()
+
+
+# Create the plot
+ggplot(data = airbnb, aes(x = longitude, y = latitude, color = neighbourhood_group)) +
+  geom_point(size = 0.8) +
+  ggtitle("Map showing listings in NYC boroughs") +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  theme_bw()
+
+table(airbnb$room_type)
+# Create the plot
+ggplot(data = airbnb, aes(x = room_type)) +
+  geom_bar() +
+  ggtitle("Airbnb listings in NYC by room type") +
+  xlab("Room type") +
+  ylab("Count") +
+  theme_bw()
+
+
+
+# Group by neighbourhood_group and room_type, and count the groups
+data_room_type_borough <- airbnb %>% 
+  group_by(neighbourhood_group, room_type) %>% 
+  count()
+
+# Show the resulting data frame
+data_room_type_borough
+
+
+ggplot(airbnb, aes(x=neighbourhood_group, fill=room_type)) +
+  geom_bar(position='dodge') +
+  labs(title='Listings in NYC boroughs by room type') +
+  theme_bw() +
+  scale_fill_brewer(palette='Set2')
+
+# Scatterplot of Airbnb listings in NYC by room type
+ggplot(airbnb, aes(x = longitude, y = latitude, color = room_type)) +
+  geom_point() +
+  scale_color_brewer(type = "qual", palette = "Set2") +
+  labs(title = "Airbnb listings in NYC by room type")
+
+# Boxplot showing quartile data of room availability in each borough
+ggplot(airbnb, aes(x = neighbourhood_group, y = availability_365)) +
+  geom_boxplot() +
+  labs(title = 'Room availability in each borough', x = 'Neighbourhood_group', y = 'Availability (days)')
+
+
+
+# Group availability_365 into 10 bins of equal width
+airbnb$availability_group <- cut(airbnb$availability_365, breaks = 10)
+
+# Plot using discrete color scale
+ggplot(data = airbnb, aes(x = longitude, y = latitude, color = availability_group)) +
+  geom_point() +
+  scale_color_discrete(name = "Availability (days)") +
+  labs(title = "Airbnb listings by year-round room availability")
+#A clear pattern between year-round room availability and listing location is not seen.
+
+# Analysis of listing prices
+
+ggplot(airbnb, aes(x=price)) +
+  geom_histogram(fill="blue", alpha=0.5, bins=30) +
+  labs(title = 'Listings price distribution')
+
+ggplot(airbnb, aes(x = neighbourhood_group, y = price)) +
+  geom_boxplot(binwidth = 25, fill = "orange", color = "black", alpha = 0.8) +
+  labs(title = "Listing Price quartiles of each borough")
+
+nrow(subset(airbnb, price > 1000))
+#Removing outliers in prices
+#Remove all listings with a price greater than 1000USD.
+#These values are outliers and skew the data.
+
+airbnb <- airbnb[airbnb$price <= 1000,]
+nrow(airbnb)
+
+ggplot(data = subset(airbnb, price <= 500), aes(x = price)) + 
+  geom_histogram(binwidth = 25, fill = "purple", color = "black", alpha = 0.8) + 
+  labs(title = "Listings price distribution")
+
+ggplot(airbnb, aes(x = neighbourhood_group, y = price)) +
+  geom_boxplot(binwidth = 25, fill = "orange", color = "black", alpha = 0.8) +
+  ggtitle('Listing Price quartiles of each borough')
+
+
+borough_mean_prices <- airbnb %>%
+  group_by(neighbourhood_group) %>%
+  summarize(mean_price = mean(price))
+borough_mean_prices
+
+#Mean prices of listings in NYC by borough
+ggplot(borough_mean_prices, aes(x = neighbourhood_group, y = mean_price)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Neighbourhood_group", y = "Mean Price", title = "Mean prices of listings in NYC by borough")
+#Manhattan is the most expensive place to rent 
+#an airbnb in NYC while Bronx is the most most inexpensive
+
+#Let us now see how the room_type affects the price of a listing
+price_by_room_type <- airbnb %>%
+  group_by(room_type) %>%
+  summarize(mean_price = mean(price))
+
+ggplot(data = price_by_room_type, aes(x = room_type, y = mean_price, fill = room_type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Mean prices of listings by available room type", x = "Room Type", y = "Price") +
+  scale_fill_manual(values = c("red", "blue", "green"))
+#The average price of an entire home/apt rental is the highest of the three at 194 USD followed by 
+#that of a private room, and then a shared room at 67 USD
+
+#Minimum nights policy of rentals
+summary(airbnb$minimum_nights)
+
+#We must eliminate outliers from this data since a rental 
+#cannot have a minimum stay requirement of 1250 nights!
+nrow(airbnb[airbnb$minimum_nights > 30, ])
+airbnb$minimum_nights[airbnb$minimum_nights > 30] <- 30
+
+ggplot(data = airbnb, aes(x = minimum_nights)) + 
+  geom_histogram(binwidth = 0.5, fill = "blue", alpha = 0.8) +
+  labs(title = "Distribution of listings by minimum nights stay requirement", x = "Minimum Nights")
+
+ggplot(data = airbnb, aes(x = minimum_nights, y = price)) +
+  geom_point(color= "red", alpha= 0.10) +
+  labs(title = "Price vs Minimum Nights Stay", x = "Minimum Nights Stay", y = "Price")
+
+cor(airbnb$minimum_nights, airbnb$price)
+# as we an see there is positive correlation 
+
+ggplot(airbnb, aes(x = availability_365, y = price)) + 
+  geom_point( color = "brown", fill = "black", alpha = 0.5) + 
+  labs(title = "Price vs Year-round Room Availability", x = "Year-round Room Availability", y = "Price") +
+  theme(plot.background = element_rect(fill = "white"),
+        panel.background = element_rect(fill = "white"),
+        plot.title = element_text(size = 20)) +
+  coord_cartesian(xlim = c(0, 365), ylim = c(0, 1000)) +
+  scale_x_continuous(breaks = seq(0, 365, by = 50))
+
+
+cor(airbnb$availability_365, airbnb$price)
+#We see that 'minimum_nights' and 'availability_365'
+
+
+```
