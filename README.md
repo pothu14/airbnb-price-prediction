@@ -1,6 +1,7 @@
 # 🏡 Airbnb Price Prediction (NYC)
 
 This project explores predictive modeling on New York City Airbnb listings using Random Forest and Multiple Linear Regression. It identifies the key drivers of price and evaluates model performance.
+https://public.tableau.com/views/AirbnbNYCPricePredictionAnalytics/AirbnbNYCPriceAvailabilityListingInsights
 
 ## 📌 Objective
 - Predict Airbnb listing prices based on features like room type, number of reviews, availability, and location.
@@ -25,7 +26,10 @@ This project explores predictive modeling on New York City Airbnb listings using
 - `airbnb_model.Rmd`: Code and analysis
 - `AIR BNB(project).pdf`: Final report
 
-## 🔗 Tableau Dashboard (coming soon)
+## 🔗 Tableau Dashboard 
+Check out the interactive dashboard here:  
+[Airbnb NYC – Price, Availability & Listing Insights](https://public.tableau.com/views/AirbnbNYCPricePredictionAnalytics/AirbnbNYCPriceAvailabilityListingInsights)
+
 
 ## 👤 Team
 Swetha Pothu, Uday Naidu Gadwala, Alekya Jaladi
